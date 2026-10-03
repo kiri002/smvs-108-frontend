@@ -1,0 +1,10 @@
+{
+  "name": "SMVS 108",
+  "short_name": "SMVS 108",
+  "description": "SMVS 108 emergency and rapid response",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#b91c1c",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

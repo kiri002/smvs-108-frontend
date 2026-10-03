@@ -1,22 +1,17 @@
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { siteConfig } from "@/config/site";
+"use client";
 
+import { useRouter } from "next/navigation";
+import * as React from "react";
+
+import { Loading } from "@/components/common/states";
+import { useAuth } from "@/lib/auth";
+
+/** Sends each role to its configured home screen. */
 export default function DashboardPage() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome to {siteConfig.name}.</p>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Getting started</CardTitle>
-          <CardDescription>
-            Add new pages under <code>app/(main)</code> and register them in{" "}
-            <code>config/navigation.ts</code>.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    </div>
-  );
+  const { user } = useAuth();
+  const router = useRouter();
+  React.useEffect(() => {
+    if (user) router.replace(user.homeScreen && user.homeScreen !== "/dashboard" ? user.homeScreen : "/control-room");
+  }, [user, router]);
+  return <Loading />;
 }

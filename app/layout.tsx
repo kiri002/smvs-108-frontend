@@ -1,5 +1,7 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Noto_Sans_Gujarati } from "next/font/google";
+
+import { Providers } from "@/components/providers";
 import { siteConfig } from "@/config/site";
 import "./globals.css";
 
@@ -13,9 +15,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const gujarati = Noto_Sans_Gujarati({
+  variable: "--font-gujarati",
+  subsets: ["gujarati"],
+  weight: ["400", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: siteConfig.name,
   description: siteConfig.description,
+  applicationName: siteConfig.name,
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "SMVS 108", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#b91c1c",
 };
 
 export default function RootLayout({
@@ -25,11 +42,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        suppressHydrationWarning
-      >
-        {children}
+      <body className={`${geistSans.variable} ${geistMono.variable} ${gujarati.variable} antialiased`} suppressHydrationWarning>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
