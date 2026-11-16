@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { Empty, ErrorState, Loading, PageHeader } from "@/components/common/states";
+import { DrillControls } from "@/components/requests/drill-controls";
 import { RequestCard } from "@/components/requests/request-card";
 import { ReserveIndicator, TeamTile } from "@/components/teams/team-tile";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,9 @@ export default function ControlRoomPage() {
           ))}
         </Select>
         <Checkbox checked={recent} onChange={(e) => setRecent(e.target.checked)} label={t("board.recent")} />
+        <div className="ml-auto">
+          <DrillControls />
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">

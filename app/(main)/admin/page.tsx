@@ -1,57 +1,29 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner";
 
 import { ErrorState, Loading, PageHeader } from "@/components/common/states";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { errorMessage, get, post } from "@/lib/api";
+import { get } from "@/lib/api";
 import { useAdminEvent, useConfigMeta } from "@/lib/admin";
-import { useAuth } from "@/lib/auth";
-import { useLookups } from "@/lib/queries";
 
 type SetupCheck = { ok: boolean; errors: number; warnings: number; issues: { severity: "error" | "warning"; area: string; message: string; link: string }[] };
 
 export default function AdminOverviewPage() {
   const { current } = useAdminEvent();
-  const { can } = useAuth();
-  const qc = useQueryClient();
   const meta = useConfigMeta();
-  const lookups = useLookups();
   const check = useQuery({
     queryKey: ["setup", current?.id],
     queryFn: () => get<SetupCheck>(`/events/${current!.id}/setup-check`),
     enabled: !!current,
   });
-  const canDrill = !!can("AUDIT", "CREATE") || !!can("CONFIG", "CONFIGURE");
-  const drill = lookups.data?.settings.drillMode ?? false;
 
   const groups = (meta.data ?? []).reduce<Record<string, typeof meta.data>>((acc, e) => {
     (acc[e.group] ??= []).push(e);
     return acc;
   }, {});
-
-  const setDrill = async (enabled: boolean) => {
-    try {
-      await post("/events/live/drill-mode", { enabled });
-      toast.success(enabled ? "Drill mode on" : "Drill mode off");
-      void qc.invalidateQueries({ queryKey: ["lookups"] });
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  };
-  const clearDrills = async () => {
-    try {
-      const r = await post<{ removed: number }>("/events/live/clear-drills");
-      toast.success(`${r.removed} drill request(s) removed`);
-      ["board", "requests"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -97,24 +69,6 @@ export default function AdminOverviewPage() {
         </CardContent>
       </Card>
 
-      {canDrill && (
-        <Card className="gap-3 py-4">
-          <CardHeader className="px-4">
-            <CardTitle>Drill mode</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center gap-2 px-4 text-sm">
-            <span>
-              Drill mode is <b>{drill ? "ON" : "OFF"}</b> for the live event. While on, every new request is tagged as a drill and left out of reports.
-            </span>
-            <Button variant={drill ? "outline" : "default"} onClick={() => void setDrill(!drill)} data-testid="drill-toggle">
-              {drill ? "Turn off" : "Turn on"}
-            </Button>
-            <Button variant="outline" onClick={() => void clearDrills()}>
-              Remove drill requests
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {meta.isLoading ? (
         <Loading />

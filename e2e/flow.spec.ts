@@ -149,6 +149,29 @@ test("reports: Admin sees every number and downloads PDF, Excel and CSV", async 
   await expect(page.getByText("No requests match these filters.")).toBeVisible();
 });
 
+test("Admin sees the Overview, read only: no Control Room, no team status or drill buttons", async ({ page }) => {
+  await login(page, ADMIN.mobile, ADMIN.pin);
+  await expect(page).toHaveURL(/\/overview/);
+  await expect(page.getByTestId("ov-today-total")).toBeVisible();
+  await expect(page.getByTestId("ov-late")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Control Room", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "New request" })).toHaveCount(0);
+  await page.goto("/teams");
+  await page.getByTestId("team-tile-108-B").click();
+  await expect(page.getByRole("button", { name: /OFF DUTY/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Change leaders" })).toHaveCount(0);
+  await page.goto("/admin");
+  await expect(page.getByTestId("drill-toggle")).toHaveCount(0);
+});
+
+test("the Control Room starts and stops a drill from its board", async ({ page }) => {
+  await login(page, CR);
+  await page.getByTestId("drill-toggle").click();
+  await expect(page.getByText(/DRILL MODE/i).first()).toBeVisible();
+  await page.getByTestId("drill-toggle").click();
+  await expect(page.getByTestId("drill-toggle")).toContainText("Start drill");
+});
+
 test("the bell opens the alerts panel (there is no separate Alerts page)", async ({ page }) => {
   await login(page, CR);
   await page.getByTestId("alerts-bell").click();
@@ -165,7 +188,7 @@ test("Gujarati language switch translates the interface", async ({ page }) => {
 
 test("admin: setup check, configuration list, add a location, permission matrix", async ({ page }) => {
   await login(page, ADMIN.mobile, ADMIN.pin);
-  await expect(page).toHaveURL(/\/control-room/); // Admin (merged with the 108 Head) lands on the Control Room
+  await expect(page).toHaveURL(/\/overview/); // Admin (oversight) lands on the read-only Overview
   await page.goto("/admin");
   await expect(page.getByTestId("setup-check")).toContainText(/warning|error|Ready/);
 

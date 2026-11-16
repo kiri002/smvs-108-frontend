@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList, LayoutDashboard, PhoneCall, Settings2, Siren, Users, type LucideIcon } from "lucide-react";
+import { BarChart3, ClipboardList, Eye, LayoutDashboard, PhoneCall, Settings2, Siren, Users, type LucideIcon } from "lucide-react";
 
 import type { MessageKey } from "@/lib/i18n";
 import type { Me } from "@/lib/types";
@@ -16,8 +16,10 @@ export type NavItem = {
 // Sidebar menu. Add new top-level pages here; visibility follows the permission matrix.
 // Alerts live in the header bell; roster, attendance and reserve approvals were removed (Nov 2026).
 export const navItems: NavItem[] = [
-  // Campus-wide screens: only roles that see everything (Admin, Control Room). Team roles work from My assignment.
-  { titleKey: "nav.controlRoom", url: "/control-room", icon: LayoutDashboard, visible: (can) => can("TRACKING", "VIEW") === "ALL" },
+  // Admin (oversight) gets the read-only Overview; the Control Room board is for those who dispatch.
+  // Team roles work from My assignment.
+  { titleKey: "nav.overview", url: "/overview", icon: Eye, visible: (can) => can("TRACKING", "VIEW") === "ALL" && !can("DISPATCH", "CREATE") },
+  { titleKey: "nav.controlRoom", url: "/control-room", icon: LayoutDashboard, visible: (can) => !!can("DISPATCH", "CREATE") },
   { titleKey: "nav.newRequest", url: "/requests/new", icon: PhoneCall, visible: (can) => !!can("INTAKE", "CREATE") },
   { titleKey: "nav.myAssignment", url: "/my-assignment", icon: Siren, visible: (_can, user) => !!user.teamId },
   { titleKey: "nav.requests", url: "/requests", icon: ClipboardList, visible: (can) => can("TRACKING", "VIEW") === "ALL" },
