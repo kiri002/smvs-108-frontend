@@ -18,7 +18,7 @@ import type { Suggestion } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Pick = { membersSent: string; overrideReasonId: string };
-type AssignResult = { results: { code: string; outcome: "ASSIGNED" | "PENDING_APPROVAL"; warning?: string }[] };
+type AssignResult = { results: { code: string; outcome: "ASSIGNED"; warning?: string }[] };
 
 /** M6: suggested teams in the configured order; the CR can pick several or override. */
 export function DispatchPanel({ requestId }: { requestId: number }) {
@@ -69,8 +69,7 @@ export function DispatchPanel({ requestId }: { requestId: number }) {
         })),
       });
       for (const r of res.results) {
-        if (r.outcome === "ASSIGNED") toast.success(`${r.code} → ${t("board.dispatch")}`);
-        else toast.info(`${r.code}: ${t("req.needsApproval")}`);
+        toast.success(`${r.code} → ${t("board.dispatch")}`);
         if (r.warning) toast.warning(r.warning);
       }
       seeded.current = "";
@@ -151,7 +150,6 @@ export function DispatchPanel({ requestId }: { requestId: number }) {
                               ))}
                             </Select>
                           )}
-                          {s.needsApproval && <Badge variant="warning">{t("req.needsApproval")}</Badge>}
                         </div>
                       )}
                     </div>

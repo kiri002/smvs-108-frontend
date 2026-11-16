@@ -1,8 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Footprints, Hammer, Loader2, MapPin, Phone, PlusCircle, UserPlus } from "lucide-react";
-import Link from "next/link";
+import { CheckCircle2, Footprints, Hammer, Loader2, MapPin, Phone, UserPlus } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -16,7 +15,7 @@ import { errorMessage, post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { postOrQueue } from "@/lib/offline-queue";
-import { useMyAssignments, useMyAttendance } from "@/lib/queries";
+import { useMyAssignments } from "@/lib/queries";
 import { formatElapsed, formatTime, useNow } from "@/lib/time";
 import type { MyJob } from "@/lib/types";
 
@@ -173,10 +172,8 @@ export default function MyAssignmentPage() {
   const { user, can } = useAuth();
   const qc = useQueryClient();
   const my = useMyAssignments(!!user?.teamId);
-  const attendance = useMyAttendance();
   const now = useNow(1000);
   const canUpdate = !!can("EXECUTION", "UPDATE");
-  const canRaise = !!can("INTAKE", "CREATE");
 
   if (!user?.teamId) return <Empty>{t("my.noTeam")}</Empty>;
   if (my.isLoading) return <Loading />;
@@ -188,15 +185,6 @@ export default function MyAssignmentPage() {
     try {
       await post(`/teams/${team.id}/status`, { statusId });
       ["my", "teamBoard"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  };
-
-  const toggleDuty = async () => {
-    try {
-      await post(attendance.data ? "/teams/attendance/check-out" : "/teams/attendance/check-in");
-      ["myAttendance", "teamBoard"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -222,12 +210,6 @@ export default function MyAssignmentPage() {
               <span className="text-muted-foreground">{t("my.standby")}:</span> {label(team.standbyPoint)}
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant={attendance.data ? "outline" : "default"} onClick={toggleDuty} data-testid="btn-duty">
-              {attendance.data ? t("my.checkOut") : t("my.checkIn")}
-            </Button>
-            <span className="text-muted-foreground text-sm">{attendance.data ? t("my.checkedIn", { time: formatTime(attendance.data.checkInAt) }) : t("my.notCheckedIn")}</span>
-          </div>
           {active.length === 0 && can("TEAMS", "EDIT") && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-muted-foreground text-sm">{t("my.teamStatus")}:</span>
@@ -251,14 +233,6 @@ export default function MyAssignmentPage() {
             <NotesCard requestId={job.request.id} assignmentId={job.id} notes={job.notes} canAdd={canUpdate} />
           </React.Fragment>
         ))
-      )}
-
-      {canRaise && (
-        <Button asChild variant="outline" size="lg">
-          <Link href="/requests/new?self=1">
-            <PlusCircle /> {t("my.raise")}
-          </Link>
-        </Button>
       )}
 
       {recent.length > 0 && (

@@ -1,7 +1,6 @@
 "use client";
 
-import { Bell, CloudOff, Languages, Wifi } from "lucide-react";
-import Link from "next/link";
+import { CloudOff, Languages, Wifi } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -12,14 +11,15 @@ import { post } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useQueuedCount } from "@/lib/offline-queue";
-import { useAlerts, useLookups } from "@/lib/queries";
+import { useLookups } from "@/lib/queries";
 import { useRealtimeStatus } from "@/lib/realtime";
+
+import { AlertsBell } from "./alerts-sheet";
 
 export function AppHeader() {
   const pathname = usePathname();
   const { t, lang, setLang } = useI18n();
   const { user } = useAuth();
-  const alerts = useAlerts(!!user);
   const lookups = useLookups();
   const live = useRealtimeStatus();
   const queued = useQueuedCount();
@@ -27,7 +27,6 @@ export function AppHeader() {
   const current = navItems
     .filter((i) => pathname === i.url || pathname.startsWith(i.url + "/"))
     .sort((a, b) => b.url.length - a.url.length)[0];
-  const unread = alerts.data?.unread ?? 0;
 
   const toggleLang = () => {
     const next = lang === "en" ? "gu" : "en";
@@ -53,16 +52,7 @@ export function AppHeader() {
             <Languages />
             <span className="text-xs">{lang === "en" ? "ગુજ" : "EN"}</span>
           </Button>
-          <Button variant="ghost" size="icon" asChild aria-label={t("nav.alerts")}>
-            <Link href="/alerts" className="relative">
-              <Bell />
-              {unread > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </Link>
-          </Button>
+          <AlertsBell enabled={!!user} />
         </div>
       </header>
       {lookups.data?.settings.drillMode && (

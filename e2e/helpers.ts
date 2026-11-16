@@ -1,7 +1,6 @@
 import { expect, type Browser, type Page } from "@playwright/test";
 
 export const CR = "9000000003";
-export const HEAD = "9000000002";
 export const ADMIN = { mobile: "9000000001", pin: "108108" };
 export const leader = (i: number) => `91000000${String(i).padStart(2, "0")}`;
 export const member = (i: number) => `93000000${String(i).padStart(2, "0")}`;

@@ -30,7 +30,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   if (!user) return null;
 
   const items = navItems.filter((item) => item.visible(can, user));
-  // Longest matching URL wins, so /teams/roster does not also highlight /teams.
+  // Longest matching URL wins, so /requests/new does not also highlight /requests.
   const active = items
     .filter((i) => pathname === i.url || pathname.startsWith(i.url + "/"))
     .sort((a, b) => b.url.length - a.url.length)[0]?.url;

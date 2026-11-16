@@ -13,7 +13,6 @@ const TOPIC_KEYS: Record<string, string[]> = {
   reserve: ["teamBoard", "releases"],
   config: ["lookups", "config", "events", "setup"],
   alerts: ["alerts"],
-  attendance: ["attendance", "teamBoard", "roster", "myAttendance"],
 };
 
 type Status = "connecting" | "live" | "offline";

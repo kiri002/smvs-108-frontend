@@ -184,7 +184,6 @@ export type Suggestion = {
   reasonParams: Record<string, string | number>;
   membersOnDuty: number;
   membersEstimated: boolean;
-  needsApproval: boolean;
   requiresOverride: boolean;
   preselected: boolean;
 };
@@ -240,16 +239,3 @@ export type MyAssignments = {
 };
 
 export type Alert = { id: number; type: string; title: string; body: string; link: string; createdAt: string; readAt: string | null };
-
-export type ReserveRelease = {
-  id: number;
-  decision: "PENDING" | "APPROVED" | "REJECTED" | "AUTO";
-  membersSent: number;
-  note: string;
-  requestedAt: string;
-  decidedAt: string | null;
-  requestedBy: string;
-  decidedBy: string | null;
-  team: Coded;
-  request: { id: number; code: string; priority: Labelled & { color: string }; issueType: Labelled; location: Labelled | null; zone: { code: string } };
-};

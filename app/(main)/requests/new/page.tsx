@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, Send } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -28,7 +28,6 @@ function IntakeForm({ cfg }: { cfg: Lookups }) {
   const { t, label } = useI18n();
   const { user, can } = useAuth();
   const router = useRouter();
-  const params = useSearchParams();
   const canBackEntry = !!can("INTAKE", "BACK_ENTRY");
   const zoneScoped = can("INTAKE", "CREATE") === "ZONE";
 
@@ -48,7 +47,8 @@ function IntakeForm({ cfg }: { cfg: Lookups }) {
   const [contactName, setContactName] = React.useState("");
   const [contactMobile, setContactMobile] = React.useState("");
   const [isDrill, setIsDrill] = React.useState(false);
-  const [selfAssign, setSelfAssign] = React.useState(params.get("self") === "1" && !!user?.teamId);
+  // Only the Control Room raises requests now; self-assign by a team (selfRaised) is no longer offered.
+  const selfAssign = false;
   const [backEntry, setBackEntry] = React.useState(false);
   const [be, setBe] = React.useState(() => ({ requestedAt: toLocalInput(new Date()), teamId: "", dispatchedAt: "", arrivedAt: "", resolvedAt: "", actionTaken: "", close: true }));
   const [busy, setBusy] = React.useState(false);
@@ -290,7 +290,6 @@ function IntakeForm({ cfg }: { cfg: Lookups }) {
       <Card className="gap-3 py-4">
         <CardContent className="grid gap-3 px-4">
           {!cfg.settings.drillMode && <Checkbox checked={isDrill} onChange={(e) => setIsDrill(e.target.checked)} label={t("intake.isDrill")} />}
-          {user?.teamId && (zoneScoped || !canBackEntry) && <Checkbox checked={selfAssign} onChange={(e) => setSelfAssign(e.target.checked)} label={t("intake.selfAssign")} />}
           {canBackEntry && <Checkbox checked={backEntry} onChange={(e) => setBackEntry(e.target.checked)} label={t("intake.backEntry")} />}
           {backEntry && (
             <div className="bg-muted/40 grid gap-3 rounded-md border p-3 sm:grid-cols-2">

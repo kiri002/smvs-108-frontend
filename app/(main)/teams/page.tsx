@@ -14,10 +14,9 @@ import { errorMessage, get, post, put } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useLookups, useTeamBoard } from "@/lib/queries";
-import { formatTime, useNow } from "@/lib/time";
+import { useNow } from "@/lib/time";
 import type { BoardTeam } from "@/lib/types";
 
-type AttendanceRow = { id: number; checkInAt: string; user: { id: number; name: string; mobile: string; role: { labelEn: string } }; team: { id: number; code: string } };
 type UserRow = { id: number; name: string; mobile: string; teamId: number | null; role: { code: string; labelEn: string } };
 
 function TeamDetail({ team }: { team: BoardTeam }) {
@@ -26,11 +25,10 @@ function TeamDetail({ team }: { team: BoardTeam }) {
   const qc = useQueryClient();
   const lookups = useLookups();
   const canEdit = !!can("TEAMS", "EDIT");
-  const [dialog, setDialog] = React.useState<"swap" | "checkin" | null>(null);
-  const attendance = useQuery({ queryKey: ["attendance", team.id], queryFn: () => get<AttendanceRow[]>("/teams/attendance", { teamId: team.id }) });
-  const users = useQuery({ queryKey: ["users", "team"], queryFn: () => get<UserRow[]>("/users"), enabled: canEdit });
+  const [dialog, setDialog] = React.useState<"swap" | null>(null);
+  const users = useQuery({ queryKey: ["users", "team"], queryFn: () => get<UserRow[]>("/users"), enabled: !!can("USERS", "VIEW") });
   const manual = (lookups.data?.teamStatuses ?? []).filter((s) => ["AVAILABLE", "OFF_DUTY", "CUSTOM"].includes(s.meaning));
-  const refresh = () => ["teamBoard", "attendance", "my"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
+  const refresh = () => ["teamBoard", "my"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
   const run = (p: Promise<unknown>) => p.then(refresh).catch((e) => toast.error(errorMessage(e)));
   const teamUsers = (users.data ?? []).filter((u) => u.teamId === team.id);
 
@@ -72,31 +70,24 @@ function TeamDetail({ team }: { team: BoardTeam }) {
           </div>
         )}
         <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="font-semibold">
-              {t("teams.onDuty")} ({attendance.data?.length ?? 0})
-            </span>
-            {canEdit && (
-              <Button size="sm" variant="outline" onClick={() => setDialog("checkin")}>
-                {t("teams.checkInMember")}
-              </Button>
-            )}
+          <div className="mb-1 font-semibold">
+            {t("teams.people")} ({teamUsers.length})
           </div>
-          <ul className="grid gap-1">
-            {attendance.data?.map((a) => (
-              <li key={a.id} className="flex items-center gap-2">
-                <span>{a.user.name}</span>
-                <span className="text-muted-foreground text-xs">
-                  {a.user.role.labelEn} · {formatTime(a.checkInAt)}
-                </span>
-                {canEdit && (
-                  <Button size="sm" variant="ghost" className="ml-auto h-7" onClick={() => void run(post("/teams/attendance/check-out", { userId: a.user.id }))}>
-                    {t("my.checkOut")}
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
+          {teamUsers.length === 0 ? (
+            <p className="text-muted-foreground text-xs">{t("teams.noPeople", { n: team.minMembers })}</p>
+          ) : (
+            <ul className="grid gap-1">
+              {teamUsers.map((u) => (
+                <li key={u.id} className="flex items-center gap-2">
+                  <span>{u.name}</span>
+                  <span className="text-muted-foreground text-xs">{u.role.labelEn}</span>
+                  <a href={`tel:${u.mobile}`} className="text-muted-foreground ml-auto inline-flex items-center gap-1 text-xs hover:underline">
+                    <Phone className="size-3" /> {u.mobile}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </CardContent>
       <ActionDialog
@@ -110,28 +101,6 @@ function TeamDetail({ team }: { team: BoardTeam }) {
         confirmLabel={t("common.save")}
         onConfirm={async (v) => {
           await put(`/teams/${team.id}/leadership`, { leaderUserId: Number(v.leaderUserId), deputyUserId: Number(v.deputyUserId) });
-          refresh();
-        }}
-      />
-      <ActionDialog
-        open={dialog === "checkin"}
-        onOpenChange={(o) => !o && setDialog(null)}
-        title={`${team.code} · ${t("teams.checkInMember")}`}
-        fields={[
-          {
-            name: "userId",
-            label: t("roster.person"),
-            type: "select",
-            required: true,
-            options: (users.data ?? [])
-              .filter((u) => !attendance.data?.some((a) => a.user.id === u.id))
-              .sort((a, b) => Number(b.teamId === team.id) - Number(a.teamId === team.id))
-              .map((u) => ({ value: String(u.id), label: `${u.name} · ${u.mobile}` })),
-          },
-        ]}
-        confirmLabel={t("my.checkIn")}
-        onConfirm={async (v) => {
-          await post("/teams/attendance/check-in", { userId: Number(v.userId), teamId: team.id });
           refresh();
         }}
       />
@@ -163,7 +132,7 @@ export default function TeamsPage() {
               ))}
             </div>
           </div>
-          <div>{team ? <TeamDetail key={team.id} team={team} /> : <p className="text-muted-foreground text-sm">Select a team to see its people and change its status.</p>}</div>
+          <div>{team ? <TeamDetail key={team.id} team={team} /> : <p className="text-muted-foreground text-sm">{t("teams.selectHint")}</p>}</div>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { get } from "./api";
 import { syncServerTime } from "./time";
-import type { Alert, Board, Lookups, MyAssignments, RequestDetail, ReserveRelease, SuggestionPlan, TeamBoard } from "./types";
+import type { Alert, Board, Lookups, MyAssignments, RequestDetail, SuggestionPlan, TeamBoard } from "./types";
 
 // Live data refreshes on server push; this interval is the fallback if the stream drops.
 const LIVE = 15_000;
@@ -63,14 +63,6 @@ export const useMyAssignments = (enabled = true) =>
     enabled,
   });
 
-export const useMyAttendance = () =>
-  useQuery({
-    queryKey: ["myAttendance"],
-    queryFn: () => get<{ id: number; checkInAt: string; team: { id: number; code: string } } | null>("/teams/attendance/me"),
-  });
-
 export const useAlerts = (enabled = true) =>
   useQuery({ queryKey: ["alerts"], queryFn: () => get<{ items: Alert[]; unread: number }>("/alerts"), refetchInterval: 30_000, enabled });
 
-export const useReleases = (pending: boolean, enabled = true) =>
-  useQuery({ queryKey: ["releases", pending], queryFn: () => get<ReserveRelease[]>("/reserve-releases", { pending: pending ? 1 : undefined }), enabled, refetchInterval: LIVE });

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { ADMIN, asUser, CR, HEAD, leader, login, member } from "./helpers";
+import { ADMIN, asUser, CR, leader, login, member } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -95,7 +95,7 @@ test("duplicate warning appears for a second call at the same place", async ({ p
   await expect(page.getByTestId("duplicate-warning")).toContainText("108-0002");
 });
 
-test("reserve for a non-urgent request needs the Head's approval", async ({ page, browser }) => {
+test("the Control Room sends the reserve team directly (no approval step)", async ({ page }) => {
   await login(page, CR);
   await page.goto("/requests/new");
   await page.locator("#zone").selectOption({ label: "Z07 · Back-end / Logistics" });
@@ -104,32 +104,55 @@ test("reserve for a non-urgent request needs the Head's approval", async ({ page
   await page.getByTestId("intake-submit").click();
   await expect(page).toHaveURL(/\/requests\/\d+$/);
   const panel = page.getByTestId("dispatch-panel");
-  // Untick the primary, pick the reserve
   await panel.getByRole("checkbox", { name: "108-G" }).uncheck();
   await panel.getByRole("checkbox", { name: "108-R" }).check();
-  await expect(panel.getByTestId("suggestion-108-R")).toContainText("Needs Head approval");
+  await expect(panel.getByTestId("suggestion-108-R")).toContainText("Reserve team");
   await panel.getByTestId("assign-button").click();
-  await expect(page.getByText("Reserve approval pending").or(page.getByText("108-R: Needs Head approval")).first()).toBeVisible();
-
-  const head = await asUser(browser, HEAD);
-  await head.page.goto("/approvals");
-  await head.page.getByRole("button", { name: "Approve" }).first().click();
-  await head.page.getByRole("dialog").getByRole("button", { name: "Approve" }).click();
-  await expect(head.page.getByText("No reserve requests waiting.")).toBeVisible();
-  await head.context.close();
-
-  await page.reload();
   await expect(page.getByTestId("assignment-108-R")).toBeVisible();
 });
 
-test("a Member only sees their team's work and cannot raise requests", async ({ page }) => {
+test("a Member sees only their team's work: no requests, reports, admin or check-in", async ({ page }) => {
   await login(page, member(2));
   await expect(page).toHaveURL(/\/my-assignment/);
+  for (const name of ["New request", "Control Room", "Requests", "Reports", "Admin", "Roster", "Approvals", "Alerts"]) {
+    await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
+  }
+  await expect(page.getByTestId("btn-duty")).toHaveCount(0);
+  await page.goto("/teams");
+  await expect(page.getByTestId("team-tile-108-B")).toBeVisible();
+  await expect(page.getByTestId("team-tile-108-A")).toHaveCount(0);
+});
+
+test("a Team Leader cannot raise requests and sees reports for their own team only", async ({ page }) => {
+  await login(page, leader(2));
+  await expect(page).toHaveURL(/\/my-assignment/);
   await expect(page.getByRole("link", { name: "New request" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
-  await expect(page.getByTestId("btn-duty")).toBeVisible();
-  await page.getByTestId("btn-duty").click();
-  await expect(page.getByText(/On duty since/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Control Room", exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "Reports" }).click();
+  await expect(page.getByText("Your team only (108-B).")).toBeVisible();
+  await expect(page.locator("#rep-team")).toHaveCount(0);
+});
+
+test("reports: Admin sees every number and downloads PDF, Excel and CSV", async ({ page }) => {
+  await login(page, ADMIN.mobile, ADMIN.pin);
+  await page.goto("/reports");
+  await expect(page.getByText("Requests per day")).toBeVisible();
+  await expect(page.getByText("Team performance", { exact: false })).toBeVisible();
+  for (const [id, ext] of [["export-pdf", ".pdf"], ["export-xlsx", ".xlsx"], ["export-csv", ".csv"]]) {
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(id).click()]);
+    const name = download.suggestedFilename();
+    expect(name.startsWith("SMVS-108-report_") && name.endsWith(ext)).toBe(true);
+  }
+  // Date filter: a day long ago has no requests
+  await page.locator("#rep-from").fill("2020-01-01");
+  await page.locator("#rep-to").fill("2020-01-01");
+  await expect(page.getByText("No requests match these filters.")).toBeVisible();
+});
+
+test("the bell opens the alerts panel (there is no separate Alerts page)", async ({ page }) => {
+  await login(page, CR);
+  await page.getByTestId("alerts-bell").click();
+  await expect(page.getByRole("dialog").getByText("Alerts", { exact: true })).toBeVisible();
 });
 
 test("Gujarati language switch translates the interface", async ({ page }) => {
@@ -142,7 +165,8 @@ test("Gujarati language switch translates the interface", async ({ page }) => {
 
 test("admin: setup check, configuration list, add a location, permission matrix", async ({ page }) => {
   await login(page, ADMIN.mobile, ADMIN.pin);
-  await expect(page).toHaveURL(/\/admin/);
+  await expect(page).toHaveURL(/\/control-room/); // Admin (merged with the 108 Head) lands on the Control Room
+  await page.goto("/admin");
   await expect(page.getByTestId("setup-check")).toContainText(/warning|error|Ready/);
 
   await page.goto("/admin/config/locations");
