@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { FileSpreadsheet, FileText, FileType2, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, CircleHelp, FileSpreadsheet, FileText, FileType2, Lightbulb, Loader2, XCircle } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
@@ -16,17 +17,31 @@ import { errorMessage, get } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useLookups } from "@/lib/queries";
-import { downloadCsv, downloadExcel, downloadPdf, num, pct, reportTables, zoned, type FilterText, type Report } from "@/lib/reports";
+import {
+  cellText,
+  downloadCsv,
+  downloadExcel,
+  downloadPdf,
+  fmtMin,
+  headline,
+  heatHex,
+  HEAT,
+  tone,
+  reportTables,
+  zoned,
+  type FilterText,
+  type MetCount,
+  type Report,
+  type Table,
+} from "@/lib/reports";
 import { cn } from "@/lib/utils";
 
 type Filters = { from: string; to: string; zoneId: string; teamId: string; priorityId: string; issueTypeId: string; includeDrill: boolean };
 const EMPTY: Filters = { from: "", to: "", zoneId: "", teamId: "", priorityId: "", issueTypeId: "", includeDrill: false };
 
 /** Today's date (YYYY-MM-DD) in the event's time zone. */
-const todayIn = (tz: string, offsetDays = 0) => {
-  const d = new Date(Date.now() + offsetDays * 86_400_000);
-  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-};
+const todayIn = (tz: string, offsetDays = 0) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + offsetDays * 86_400_000));
 
 const AXIS = { stroke: "var(--viz-axis)", fontSize: 11, tickLine: false, axisLine: { stroke: "var(--viz-grid)" } } as const;
 const TOOLTIP = {
@@ -35,39 +50,59 @@ const TOOLTIP = {
   labelStyle: { fontWeight: 600 },
 } as const;
 
-function Tile({ label, value, sub, tone }: { label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad" }) {
+const TONE_CLS = { good: "text-emerald-700 dark:text-emerald-400", bad: "text-red-700 dark:text-red-400", few: "text-muted-foreground" } as const;
+
+/** A % with the count it rests on, an icon and a word, so it never relies on colour alone. */
+function Met({ m }: { m: MetCount }) {
+  const { t } = useI18n();
+  const k = tone(m);
+  if (!k) return <span className="text-muted-foreground">—</span>;
+  const Icon = k === "good" ? CheckCircle2 : k === "bad" ? XCircle : CircleHelp;
   return (
-    <div className="bg-card flex flex-col gap-1 rounded-xl border p-3">
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <span className="text-2xl font-bold tabular-nums">{value}</span>
-      {sub && <span className={cn("text-xs", tone === "bad" ? "text-red-700 dark:text-red-400" : tone === "good" ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground")}>{sub}</span>}
-    </div>
+    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap", TONE_CLS[k])} title={k === "few" ? t("rep.fewHelp") : undefined}>
+      <Icon className="size-3.5" />
+      <b className="tabular-nums">{m.pct}%</b>
+      <span className="text-muted-foreground text-xs">
+        ({m.met}/{m.of}
+        {k === "few" ? ` · ${t("rep.few")}` : ""})
+      </span>
+    </span>
   );
 }
 
-/** A simple table from the shared export tables, so screen and downloads always match. */
-function DataTable({ head, rows, max }: { head: string[]; rows: (string | number)[][]; max?: number }) {
-  const shown = max ? rows.slice(0, max) : rows;
+/** A view from the shared definitions, so screen and downloads always agree. */
+function DataTable({ table, tz, max, link }: { table: Table; tz: string; max?: number; link?: (row: number) => string }) {
+  const rows = max ? table.rows.slice(0, max) : table.rows;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-muted-foreground border-b text-left text-xs">
-            {head.map((h, i) => (
-              <th key={h} className={cn("p-2 font-medium whitespace-nowrap", i > 0 && "text-right")}>
-                {h}
+            {table.cols.map((c, i) => (
+              <th key={c.h} className={cn("p-2 font-medium whitespace-nowrap", i > 0 && c.f && c.f !== "text" && c.f !== "dt" && "text-right")}>
+                {c.h}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {shown.map((row, ri) => (
+          {rows.map((row, ri) => (
             <tr key={ri} className="border-b last:border-0">
-              {row.map((v, i) => (
-                <td key={i} className={cn("p-2 whitespace-nowrap", i > 0 && "text-right tabular-nums")}>
-                  {v}
-                </td>
-              ))}
+              {row.map((v, i) => {
+                const c = table.cols[i];
+                const text = cellText(v, c.f, tz);
+                return (
+                  <td key={i} className={cn("p-2 whitespace-nowrap", i > 0 && c.f && c.f !== "text" && c.f !== "dt" && "text-right tabular-nums")}>
+                    {i === 0 && link ? (
+                      <Link href={link(ri)} className="font-mono hover:underline">
+                        {text}
+                      </Link>
+                    ) : (
+                      text
+                    )}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -77,11 +112,11 @@ function DataTable({ head, rows, max }: { head: string[]; rows: (string | number
 }
 
 /** Chart with a Chart / Table switch (the table is the accessible view of the same numbers). */
-function ChartCard({ title, table, children, className }: { title: string; table: { head: string[]; rows: (string | number)[][] }; children: React.ReactNode; className?: string }) {
+function ChartCard({ title, table, tz, children }: { title: string; table: Table; tz: string; children: React.ReactNode }) {
   const { t } = useI18n();
   const [view, setView] = React.useState<"chart" | "table">("chart");
   return (
-    <Card className={cn("gap-2 py-4", className)}>
+    <Card className="gap-2 py-4">
       <CardHeader className="flex flex-row items-center justify-between gap-2 px-4">
         <CardTitle className="text-base">{title}</CardTitle>
         <div className="flex rounded-md border p-0.5 text-xs">
@@ -92,7 +127,66 @@ function ChartCard({ title, table, children, className }: { title: string; table
           ))}
         </div>
       </CardHeader>
-      <CardContent className="px-4">{view === "chart" ? <div className="h-64">{children}</div> : <DataTable {...table} />}</CardContent>
+      <CardContent className="px-4">{view === "chart" ? children : <DataTable table={table} tz={tz} />}</CardContent>
+    </Card>
+  );
+}
+
+/** Requests by day × hour; darker = busier. Shows the last 14 days. */
+function BusyHours({ r }: { r: Report }) {
+  const { t } = useI18n();
+  const days = r.byDay.slice(-14);
+  const max = Math.max(1, ...r.byDayHour.map((x) => x.total));
+  const at = (date: string, h: number) => r.byDayHour.find((x) => x.date === date && x.hour === h)?.total ?? 0;
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid min-w-[560px] gap-[2px] text-[10px]" style={{ gridTemplateColumns: "64px repeat(24, minmax(16px, 1fr))" }}>
+        <span />
+        {Array.from({ length: 24 }, (_, h) => (
+          <span key={h} className="text-muted-foreground text-center">
+            {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
+          </span>
+        ))}
+        {days.map((d) => (
+          <React.Fragment key={d.date}>
+            <span className="text-muted-foreground pr-1 text-right leading-5">{d.date.slice(5)}</span>
+            {Array.from({ length: 24 }, (_, h) => {
+              const v = at(d.date, h);
+              const share = v / max;
+              return (
+                <span
+                  key={h}
+                  title={`${d.date} ${String(h).padStart(2, "0")}:00 · ${v}`}
+                  className="flex h-5 items-center justify-center rounded-[3px] font-medium tabular-nums"
+                  style={{ background: v ? heatHex(share) : "var(--viz-grid)", color: share > 0.55 ? "#fff" : "#0b0b0b" }}
+                >
+                  {v || ""}
+                </span>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="text-muted-foreground mt-2 flex items-center gap-1 text-xs">
+        {t("rep.fewer")}
+        {HEAT.map((c) => (
+          <span key={c} className="h-2.5 w-5 rounded-[2px]" style={{ background: c }} />
+        ))}
+        {t("rep.more")}
+        {r.byDay.length > 14 && <span className="ml-2">{t("rep.last14")}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children, right }: { title: React.ReactNode; children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <Card className="gap-2 py-4">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-4">
+        <CardTitle className="flex items-center gap-2 text-base">{title}</CardTitle>
+        {right}
+      </CardHeader>
+      <CardContent className="px-4">{children}</CardContent>
     </Card>
   );
 }
@@ -105,6 +199,7 @@ export default function ReportsPage() {
   const [busy, setBusy] = React.useState<"" | "pdf" | "xlsx" | "csv">("");
   const [search, setSearch] = React.useState("");
   const [rowsShown, setRowsShown] = React.useState(50);
+  const [allExceptions, setAllExceptions] = React.useState(false);
   const allScope = can("REPORTS", "VIEW") === "ALL";
   const canExport = !!can("REPORTS", "EXPORT");
   const tz = lookups.data?.event?.timezone ?? "Asia/Kolkata";
@@ -137,16 +232,17 @@ export default function ReportsPage() {
 
   const cfg = lookups.data;
   const r = report.data;
-  const tables = React.useMemo(() => (r ? Object.fromEntries(reportTables(r).map((x) => [x.name, x])) : {}), [r]);
+  const tables = React.useMemo(() => (r ? reportTables(r) : null), [r]);
 
   const filterText = (): FilterText => {
-    const name = <T extends { id: number }>(list: T[] | undefined, id: string, f: (x: T) => string) => list?.find((x) => String(x.id) === id) && f(list.find((x) => String(x.id) === id)!);
+    const find = <X extends { id: number }>(list: X[] | undefined, id: string) => list?.find((x) => String(x.id) === id);
+    const zone = find(cfg?.zones, filters.zoneId);
     return [
       { label: "Dates", value: filters.from || filters.to ? `${filters.from || "start"} to ${filters.to || "today"}` : "All dates" },
-      { label: "Zone", value: name(cfg?.zones, filters.zoneId, (z) => `${z.code} · ${z.labelEn}`) || "All" },
-      { label: "Team", value: r?.filters.teamCode ?? (name(cfg?.teams, filters.teamId, (x) => x.code) || "All") },
-      { label: "Priority", value: name(cfg?.priorities, filters.priorityId, (x) => x.labelEn) || "All" },
-      { label: "Issue type", value: name(cfg?.issueTypes, filters.issueTypeId, (x) => x.labelEn) || "All" },
+      { label: "Zone", value: zone ? `${zone.code} · ${zone.labelEn}` : "All" },
+      { label: "Team", value: r?.filters.teamCode ?? find(cfg?.teams, filters.teamId)?.code ?? "All" },
+      { label: "Priority", value: find(cfg?.priorities, filters.priorityId)?.labelEn ?? "All" },
+      { label: "Issue type", value: find(cfg?.issueTypes, filters.issueTypeId)?.labelEn ?? "All" },
       { label: "Drills", value: filters.includeDrill ? "Included" : "Left out" },
     ];
   };
@@ -174,9 +270,8 @@ export default function ReportsPage() {
 
   const s = r?.summary;
   const dayData = r?.byDay.map((d) => ({ name: d.date.slice(5), completed: d.completed, active: d.open + d.inProgress, cancelled: d.cancelled + d.merged })) ?? [];
-  const hourData = r?.byHour.map((h) => ({ name: String(h.hour).padStart(2, "0"), total: h.total })) ?? [];
   const zoneData = r?.byZone.map((z) => ({ name: z.label.split(" · ")[0], full: z.label, total: z.total })) ?? [];
-  const prioData = r?.byPriority.map((p) => ({ name: p.label, dispatch: p.avgDispatchMin, arrive: p.avgArriveMin, resolve: p.avgResolveMin })) ?? [];
+  const issueData = (r?.byIssueType ?? []).slice(0, 8).map((x) => ({ name: x.label, total: x.total }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -187,13 +282,13 @@ export default function ReportsPage() {
           canExport &&
           r && (
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void download("pdf")} disabled={!!busy} data-testid="export-pdf">
+              <Button variant="outline" onClick={() => void download("pdf")} disabled={!!busy} data-testid="export-pdf" title={t("rep.pdfHelp")}>
                 {busy === "pdf" ? <Loader2 className="animate-spin" /> : <FileText />} PDF
               </Button>
-              <Button variant="outline" onClick={() => void download("xlsx")} disabled={!!busy} data-testid="export-xlsx">
+              <Button variant="outline" onClick={() => void download("xlsx")} disabled={!!busy} data-testid="export-xlsx" title={t("rep.xlsxHelp")}>
                 {busy === "xlsx" ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} Excel
               </Button>
-              <Button variant="outline" onClick={() => void download("csv")} disabled={!!busy} data-testid="export-csv">
+              <Button variant="outline" onClick={() => void download("csv")} disabled={!!busy} data-testid="export-csv" title={t("rep.csvHelp")}>
                 {busy === "csv" ? <Loader2 className="animate-spin" /> : <FileType2 />} CSV
               </Button>
             </div>
@@ -201,7 +296,7 @@ export default function ReportsPage() {
         }
       />
 
-      {/* FILTERS — one row above the charts */}
+      {/* FILTERS */}
       <Card className="gap-3 py-3">
         <CardContent className="grid gap-3 px-4">
           <div className="flex flex-wrap gap-2">
@@ -279,117 +374,192 @@ export default function ReportsPage() {
         <Loading />
       ) : report.error ? (
         <ErrorState error={report.error} onRetry={() => report.refetch()} />
-      ) : !r || !s ? null : s.total === 0 ? (
+      ) : !r || !s || !tables ? null : s.total === 0 ? (
         <Empty>{t("rep.none")}</Empty>
       ) : (
         <div className={cn("flex flex-col gap-4 transition-opacity", report.isFetching && "opacity-60")}>
-          {/* HEADLINE NUMBERS */}
+          {/* 1. FINDINGS — the answer first */}
+          <Section
+            title={
+              <>
+                <Lightbulb className="size-4 text-amber-600" /> {t("rep.findings")}
+              </>
+            }
+          >
+            <ul className="grid gap-1.5 text-sm" data-testid="rep-findings">
+              {r.findings.map((f) => (
+                <li key={f} className="flex gap-2">
+                  <span className="text-muted-foreground">•</span>
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+
+          {/* 2. HEADLINE NUMBERS */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-            <Tile label={t("rep.total")} value={s.total} />
-            <Tile label={t("rep.completed")} value={s.completed} sub={t("rep.ofTotal", { pct: pct(s.completionPct) })} />
-            <Tile label={t("rep.active")} value={s.open + s.inProgress} sub={t("rep.openSplit", { open: s.open, prog: s.inProgress })} />
-            <Tile label={t("rep.cancelled")} value={s.cancelled + s.merged} />
-            <Tile label={t("rep.avgArrive")} value={`${num(s.arrive.avg)} ${t("rep.min")}`} sub={`P90 ${num(s.arrive.p90)} ${t("rep.min")}`} />
-            <Tile label={t("rep.avgResolve")} value={`${num(s.resolve.avg)} ${t("rep.min")}`} sub={`P90 ${num(s.resolve.p90)} ${t("rep.min")}`} />
-            <Tile
-              label={t("rep.arriveTarget")}
-              value={pct(s.arriveMetPct)}
-              sub={s.arriveMetPct === null ? undefined : s.arriveMetPct >= 90 ? t("rep.good") : t("rep.needsWork")}
-              tone={s.arriveMetPct === null ? undefined : s.arriveMetPct >= 90 ? "good" : "bad"}
-            />
-            <Tile
-              label={t("rep.resolveTarget")}
-              value={pct(s.resolveMetPct)}
-              sub={s.resolveMetPct === null ? undefined : s.resolveMetPct >= 90 ? t("rep.good") : t("rep.needsWork")}
-              tone={s.resolveMetPct === null ? undefined : s.resolveMetPct >= 90 ? "good" : "bad"}
-            />
+            {headline(r).map((h) => (
+              <div key={h.label} className="bg-card flex flex-col gap-1 rounded-xl border p-3">
+                <span className="text-muted-foreground text-xs">{h.label}</span>
+                <span className={cn("text-2xl font-bold tabular-nums", h.tone && h.tone !== "few" && TONE_CLS[h.tone])}>{h.value}</span>
+                {h.sub && <span className="text-muted-foreground text-xs">{h.sub}</span>}
+              </div>
+            ))}
           </div>
 
-          {/* CHARTS */}
+          {/* 3. ON TIME BY PRIORITY */}
+          <Section title={t("rep.onTimeTitle")}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="rep-ontime">
+                <thead>
+                  <tr className="text-muted-foreground border-b text-left text-xs">
+                    <th className="p-2">{t("rep.priority")}</th>
+                    <th className="p-2">{t("rep.targets")}</th>
+                    <th className="p-2 text-right">{t("rep.total")}</th>
+                    <th className="p-2">{t("rep.sentOnTime")}</th>
+                    <th className="p-2">{t("rep.arrivedOnTime")}</th>
+                    <th className="p-2">{t("rep.resolvedOnTime")}</th>
+                    <th className="p-2 text-right">{t("rep.typicalArrive")}</th>
+                    <th className="p-2 text-right">{t("rep.slowArrive")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...r.onTime, r.onTimeAll].map((p) => (
+                    <tr key={p.label} className={cn("border-b last:border-0", p.label === "All priorities" && "font-semibold")}>
+                      <td className="p-2 whitespace-nowrap">{p.color ? <ColorBadge color={p.color}>{p.label}</ColorBadge> : t("rep.allPriorities")}</td>
+                      <td className="text-muted-foreground p-2 text-xs whitespace-nowrap">{p.targets && p.color ? `${p.targets.dispatch} / ${p.targets.arrive} / ${p.targets.resolve} min` : ""}</td>
+                      <td className="p-2 text-right tabular-nums">{p.total}</td>
+                      <td className="p-2">
+                        <Met m={p.dispatch} />
+                      </td>
+                      <td className="p-2">
+                        <Met m={p.arrive} />
+                      </td>
+                      <td className="p-2">
+                        <Met m={p.resolve} />
+                      </td>
+                      <td className="p-2 text-right tabular-nums">{fmtMin(p.arriveMedian)}</td>
+                      <td className="p-2 text-right tabular-nums">{fmtMin(p.arriveP90)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs">{t("rep.onTimeNote")}</p>
+          </Section>
+
+          {/* 4. CHARTS */}
           <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard title={t("rep.perDay")} table={tables["By day"]}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dayData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="var(--viz-grid)" />
-                  <XAxis dataKey="name" {...AXIS} />
-                  <YAxis allowDecimals={false} {...AXIS} />
-                  <Tooltip {...TOOLTIP} />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="completed" name={t("rep.completed")} stackId="a" fill="var(--viz-1)" stroke="var(--card)" strokeWidth={2} maxBarSize={28} />
-                  <Bar dataKey="active" name={t("rep.active")} stackId="a" fill="var(--viz-2)" stroke="var(--card)" strokeWidth={2} maxBarSize={28} />
-                  <Bar dataKey="cancelled" name={t("rep.cancelled")} stackId="a" fill="var(--viz-3)" stroke="var(--card)" strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
-              </ResponsiveContainer>
+            <ChartCard title={t("rep.perDay")} table={tables.byDay} tz={tz}>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dayData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="var(--viz-grid)" />
+                    <XAxis dataKey="name" {...AXIS} />
+                    <YAxis allowDecimals={false} {...AXIS} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="completed" name={t("rep.completed")} stackId="a" fill="var(--viz-1)" stroke="var(--card)" strokeWidth={2} maxBarSize={36} />
+                    <Bar dataKey="active" name={t("rep.active")} stackId="a" fill="var(--viz-2)" stroke="var(--card)" strokeWidth={2} maxBarSize={36} />
+                    <Bar dataKey="cancelled" name={t("rep.cancelled")} stackId="a" fill="var(--viz-3)" stroke="var(--card)" strokeWidth={2} radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </ChartCard>
 
-            <ChartCard title={t("rep.perHour")} table={tables["By hour"]}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={hourData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke="var(--viz-grid)" />
-                  <XAxis dataKey="name" {...AXIS} interval={1} />
-                  <YAxis allowDecimals={false} {...AXIS} />
-                  <Tooltip {...TOOLTIP} labelFormatter={(h) => `${h}:00`} />
-                  <Bar dataKey="total" name={t("rep.total")} fill="var(--viz-1)" radius={[4, 4, 0, 0]} maxBarSize={18} />
-                </BarChart>
-              </ResponsiveContainer>
+            <ChartCard title={t("rep.busyHours")} table={tables.busy} tz={tz}>
+              <BusyHours r={r} />
             </ChartCard>
 
-            <ChartCard title={t("rep.byZone")} table={tables["By zone"]}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={zoneData} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid horizontal={false} stroke="var(--viz-grid)" />
-                  <XAxis type="number" allowDecimals={false} {...AXIS} />
-                  <YAxis type="category" dataKey="name" width={44} {...AXIS} />
-                  <Tooltip {...TOOLTIP} labelFormatter={(_, p) => (p?.[0]?.payload as { full?: string })?.full ?? ""} />
-                  <Bar dataKey="total" name={t("rep.total")} fill="var(--viz-1)" radius={[0, 4, 4, 0]} maxBarSize={18} />
-                </BarChart>
-              </ResponsiveContainer>
+            <ChartCard title={t("rep.byZone")} table={tables.byZone} tz={tz}>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={zoneData} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid horizontal={false} stroke="var(--viz-grid)" />
+                    <XAxis type="number" allowDecimals={false} {...AXIS} />
+                    <YAxis type="category" dataKey="name" width={44} {...AXIS} />
+                    <Tooltip {...TOOLTIP} labelFormatter={(_, p) => (p?.[0]?.payload as { full?: string })?.full ?? ""} />
+                    <Bar dataKey="total" name={t("rep.total")} fill="var(--viz-1)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </ChartCard>
 
-            <ChartCard title={t("rep.timeByPriority")} table={tables["By priority"]}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={prioData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }} barGap={2}>
-                  <CartesianGrid vertical={false} stroke="var(--viz-grid)" />
-                  <XAxis dataKey="name" {...AXIS} />
-                  <YAxis {...AXIS} unit="m" />
-                  <Tooltip {...TOOLTIP} formatter={(v) => `${num(v as number)} ${t("rep.min")}`} />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="dispatch" name={t("rep.sent")} fill="var(--viz-1)" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="arrive" name={t("rep.arrived")} fill="var(--viz-2)" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="resolve" name={t("rep.resolved")} fill="var(--viz-3)" radius={[4, 4, 0, 0]} maxBarSize={22} />
-                </BarChart>
-              </ResponsiveContainer>
+            <ChartCard title={t("rep.byIssue")} table={tables.byIssueType} tz={tz}>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={issueData} layout="vertical" margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid horizontal={false} stroke="var(--viz-grid)" />
+                    <XAxis type="number" allowDecimals={false} {...AXIS} />
+                    <YAxis type="category" dataKey="name" width={130} {...AXIS} />
+                    <Tooltip {...TOOLTIP} />
+                    <Bar dataKey="total" name={t("rep.total")} fill="var(--viz-1)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </ChartCard>
           </div>
 
-          {/* TABLES */}
-          {(["Timing", "By team", "By zone", "By issue type", "By priority", "By status"] as const).map((name) =>
-            tables[name] && tables[name].rows.length ? (
-              <Card key={name} className="gap-2 py-4">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 px-4">
-                  <CardTitle className="text-base">{tables[name].title}</CardTitle>
-                  {canExport && (
-                    <Button size="sm" variant="ghost" onClick={() => downloadCsv(r, name)}>
-                      CSV
-                    </Button>
-                  )}
-                </CardHeader>
-                <CardContent className="px-4">
-                  <DataTable head={tables[name].head} rows={tables[name].rows} />
-                </CardContent>
-              </Card>
-            ) : null,
+          {/* 5. EXCEPTIONS */}
+          <Section
+            title={
+              <>
+                <AlertTriangle className="size-4 text-red-600" /> {t("rep.exceptions")} ({r.exceptions.length})
+              </>
+            }
+            right={
+              canExport && r.exceptions.length > 0 ? (
+                <Button size="sm" variant="ghost" onClick={() => downloadCsv(r, tables.exceptions)}>
+                  CSV
+                </Button>
+              ) : undefined
+            }
+          >
+            {r.exceptions.length === 0 ? (
+              <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                <CheckCircle2 className="mr-1 inline size-4" />
+                {t("rep.noExceptions")}
+              </p>
+            ) : (
+              <div data-testid="rep-exceptions">
+                <DataTable table={tables.exceptions} tz={tz} max={allExceptions ? undefined : 15} link={(i) => `/requests/${r.exceptions[i].id}`} />
+                {r.exceptions.length > 15 && (
+                  <Button variant="outline" size="sm" className="mt-2" onClick={() => setAllExceptions((x) => !x)}>
+                    {allExceptions ? t("rep.showFewer") : t("rep.showAll", { n: r.exceptions.length })}
+                  </Button>
+                )}
+              </div>
+            )}
+          </Section>
+
+          {/* 6. TEAMS */}
+          {tables.byTeam.rows.length > 0 && (
+            <Section title={t("rep.teams")}>
+              <DataTable table={tables.byTeam} tz={tz} />
+            </Section>
           )}
 
-          {/* EVERY REQUEST */}
-          <Card className="gap-2 py-4">
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-4">
-              <CardTitle className="text-base">
-                {t("rep.allRequests")} ({filteredRows.length})
-              </CardTitle>
-              <Input className="w-56" placeholder={t("common.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
-            </CardHeader>
-            <CardContent className="overflow-x-auto px-4">
+          {/* 7. DETAIL, folded away */}
+          <details className="bg-card group rounded-xl border">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-base font-semibold">
+              <ChevronDown className="size-4 transition-transform group-open:rotate-180" /> {t("rep.detail")}
+            </summary>
+            <div className="grid gap-4 px-4 pb-4">
+              {[tables.byZone, tables.byIssueType, tables.byDay].map((tb) => (
+                <div key={tb.name}>
+                  <h3 className="mb-1 text-sm font-semibold">{tb.title}</h3>
+                  <DataTable table={tb} tz={tz} />
+                </div>
+              ))}
+            </div>
+          </details>
+
+          {/* 8. EVERY REQUEST */}
+          <Section
+            title={`${t("rep.allRequests")} (${filteredRows.length})`}
+            right={<Input className="w-56" placeholder={t("common.search")} value={search} onChange={(e) => setSearch(e.target.value)} />}
+          >
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-muted-foreground border-b text-left text-xs">
@@ -407,17 +577,17 @@ export default function ReportsPage() {
                 <tbody>
                   {filteredRows.slice(0, rowsShown).map((x) => {
                     const cell = (v: number | null, ok: boolean | null) => (
-                      <td className={cn("p-2 text-right font-mono tabular-nums", ok === false && "text-red-700 dark:text-red-400")}>
-                        {num(v)}
+                      <td className={cn("p-2 text-right whitespace-nowrap tabular-nums", ok === false && "font-semibold text-red-700 dark:text-red-400")}>
+                        {fmtMin(v)}
                         {ok === false && <span className="sr-only"> (late)</span>}
                       </td>
                     );
                     return (
                       <tr key={x.id} className="border-b last:border-0">
                         <td className="p-2 font-mono">
-                          <a href={`/requests/${x.id}`} className="hover:underline">
+                          <Link href={`/requests/${x.id}`} className="hover:underline">
                             {x.code}
-                          </a>
+                          </Link>
                           {x.isBackEntry && <span className="text-muted-foreground ml-1 text-xs">BE</span>}
                           {x.isDrill && <span className="ml-1 text-xs text-amber-700">DRILL</span>}
                         </td>
@@ -439,14 +609,14 @@ export default function ReportsPage() {
                   })}
                 </tbody>
               </table>
-              <p className="text-muted-foreground mt-2 text-xs">{t("rep.minutesNote")}</p>
-              {filteredRows.length > rowsShown && (
-                <Button variant="outline" size="sm" className="mt-2" onClick={() => setRowsShown((n) => n + 100)}>
-                  {t("rep.showMore", { n: filteredRows.length - rowsShown })}
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs">{t("rep.minutesNote")}</p>
+            {filteredRows.length > rowsShown && (
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => setRowsShown((n) => n + 100)}>
+                {t("rep.showMore", { n: filteredRows.length - rowsShown })}
+              </Button>
+            )}
+          </Section>
         </div>
       )}
     </div>

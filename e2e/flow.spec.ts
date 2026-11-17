@@ -136,8 +136,9 @@ test("a Team Leader cannot raise requests and sees reports for their own team on
 test("reports: Admin sees every number and downloads PDF, Excel and CSV", async ({ page }) => {
   await login(page, ADMIN.mobile, ADMIN.pin);
   await page.goto("/reports");
-  await expect(page.getByText("Requests per day")).toBeVisible();
-  await expect(page.getByText("Team performance", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("rep-findings")).toContainText("requests");
+  await expect(page.getByTestId("rep-ontime")).toContainText("All priorities");
+  await expect(page.getByText("Busy hours (day × hour)")).toBeVisible();
   for (const [id, ext] of [["export-pdf", ".pdf"], ["export-xlsx", ".xlsx"], ["export-csv", ".csv"]]) {
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(id).click()]);
     const name = download.suggestedFilename();

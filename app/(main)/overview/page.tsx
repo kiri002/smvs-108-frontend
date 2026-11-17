@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { get } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useBoard, useLookups, useTeamBoard } from "@/lib/queries";
-import { num, pct, type Report } from "@/lib/reports";
+import { fmtMin, pct, type Report } from "@/lib/reports";
 import { formatElapsed, useNow } from "@/lib/time";
 import type { BoardRequest } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -93,8 +93,8 @@ export default function OverviewPage() {
           <Tile label={t("ov.requestsToday")} value={s.total} testId="ov-today-total" />
           <Tile label={t("rep.completed")} value={s.completed} sub={t("rep.ofTotal", { pct: pct(s.completionPct) })} />
           <Tile label={t("rep.active")} value={s.open + s.inProgress} sub={t("rep.openSplit", { open: s.open, prog: s.inProgress })} />
-          <Tile label={t("rep.avgArrive")} value={`${num(s.arrive.avg)} ${t("rep.min")}`} />
-          <Tile label={t("rep.avgResolve")} value={`${num(s.resolve.avg)} ${t("rep.min")}`} />
+          <Tile label={t("rep.typicalArrive")} value={fmtMin(s.arrive.median)} />
+          <Tile label={t("rep.typicalResolve")} value={fmtMin(s.resolve.median)} />
           <Tile
             label={t("rep.arriveTarget")}
             value={pct(s.arriveMetPct)}
